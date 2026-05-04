@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Strange Attractor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            color: #0ff;
+            text-shadow: 0 0 5px #0ff;
+            cursor: crosshair;
+        }
+        canvas { display: block; }
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,255,255,0.3);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+            user-select: none;
+            width: 220px;
+        }
+        .controls h2 {
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #ff0;
+            text-shadow: 0 0 10px #ff0;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 10px;
+            color: #0ff;
+            margin-bottom: 4px;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #0ff;
+        }
+        .value-display {
+            float: right;
+            color: #fff;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        select {
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            color: #0ff;
+            border: 1px solid #0ff;
+            border-radius: 4px;
+            padding: 4px;
+            font-family: inherit;
+            margin-bottom: 10px;
+        }
+        .buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        button {
+            flex: 1;
+            padding: 8px;
+            background: transparent;
+            border: 1px solid #0ff;
+            color: #0ff;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: rgba(0,255,255,0.1);
+            box-shadow: 0 0 10px rgba(0,255,255,0.3);
+        }
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #0f0;
+            text-shadow: 0 0 8px #0f0;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0,255,0,0.3);
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #888;
+            font-size: 12px;
+            text-align: center;
+            max-width: 500px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="controls">
+        <h2>🌀 NEON STRANGE ATTRACTOR</h2>
+
+        <div class="control-group">
+            <label>Attractor Type</label>
+            <select id="attractorType">
+                <option value="lorenz">Lorenz</option>
+                <option value="rossler">Rossler</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label id="param1Label">σ (sigma)</label>
+            <input type="range" id="param1" min="5" max="20" step="0.1" value="10">
+        </div>
+
+        <div class="control-group">
+            <label id="param2Label">ρ (rho)</label>
+            <input type="range" id="param2" min="10" max="50" step="0.1" value="28">
+        </div>
+
+        <div class="control-group">
+            <label id="param3Label">β (beta)</label>
+            <input type="range" id="param3" min="1" max="5" step="0.05" value="2.6667">
+        </div>
+
+        <div class="control-group">
+            <label>Sim Speed <span class="value-display" id="simSpeedVal">1.0</span></label>
+            <input type="range" id="simSpeed" min="0.2" max="3" step="0.1" value="1">
+        </div>
+
+        <div class="control-group">
+            <label>Color Cycle <span class="value-display" id="colorSpeedVal">0.5</span></label>
+            <input type="range" id="colorSpeed" min="0" max="2" step="0.1" value="0.5">
+        </div>
+
+        <div class="control-group">
+            <label>Trail Width <span class="value-display" id="widthVal">1</span></label>
+            <input type="range" id="trailWidth" min="1" max="4" value="1">
+        </div>
+
+        <div class="buttons">
+            <button id="pauseBtn">Pause</button>
+            <button id="clearBtn">Clear</button>
+            <button id="randomBtn">Randomize</button>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div>Particles: <span id="particleNum">0</span></div>
+        <div>FPS: <span id="fps">60</span></div>
+    </div>
+
+    <div class="instructions">
+        Strange attractors: Lorenz (butterfly), Rossler (twisted band). Adjust parameters to morph the shape. Add more trajectories by clicking. Watch emergent chaos glow.
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Controls
+        const typeSelect = document.getElementById('attractorType');
+        const p1Slider = document.getElementById('param1');
+        const p2Slider = document.getElementById('param2');
+        const p3Slider = document.getElementById('param3');
+        const p1Label = document.getElementById('param1Label');
+        const p2Label = document.getElementById('param2Label');
+        const p3Label = document.getElementById('param3Label');
+        const simSpeedSlider = document.getElementById('simSpeed');
+        const colorSpeedSlider = document.getElementById('colorSpeed');
+        const widthSlider = document.getElementById('trailWidth');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const randomBtn = document.getElementById('randomBtn');
+
+        let width, height;
+        let running = true;
+        let lastTime = 0;
+        let frameCount = 0;
+        let lastFpsTime = 0;
+        let hueCycle = 0;
+        let frame = 0;
+
+        // Offscreen canvas for trails
+        const trailCanvas = document.createElement('canvas');
+        const trailCtx = trailCanvas.getContext('2d');
+
+        // Attractor definitions
+        const attractorDefs = {
+            lorenz: {
+                name: "Lorenz",
+                paramNames: ["σ (sigma)", "ρ (rho)", "β (beta)"],
+                defaults: [10, 28, 2.6667],
+                ranges: [[5,20],[10,50],[1,5]],
+                deriv: (x,y,z, p) => ({
+                    dx: p[0]*(y - x),
+                    dy: x*(p[1] - z) - y,
+                    dz: x*y - p[2]*z
+                })
+            },
+            rossler: {
+                name: "Rossler",
+                paramNames: ["a", "b", "c"],
+                defaults: [0.2, 0.2, 5.7],
+                ranges: [[0.1,1],[0.1,1],[2,10]],
+                deriv: (x,y,z, p) => ({
+                    dx: -y - z,
+                    dy: x + p[0]*y,
+                    dz: p[1] + z*(x - p[2])
+                })
+            }
+        };
+
+        let currentType = 'lorenz';
+        let params = attractorDefs[currentType].defaults.slice();
+        let simSpeed = 1.0;
+        let colorSpeed = 0.5;
+        let trailWidth = 1;
+
+        // Particles: each has x,y,z, hue, lastScreenPos (sx,sy)
+        let particles = [];
+
+        // View transform
+        let scaleFactor = 1;
+        let originX, originY;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            trailCanvas.width = width;
+            trailCanvas.height = height;
+            computeScale();
+            resetSim();
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        function computeScale() {
+            // Approximate attractor bounding box size: choose scale to fit
+            // For Lorenz and Rossler, typical ranges: ~ -30..30 for x,y
+            const viewSize = Math.min(width, height);
+            scaleFactor = viewSize / 80; // 80 units across min dimension
+            originX = width / 2;
+            originY = height / 2;
+        }
+
+        function worldToScreen(x, y) {
+            return {
+                sx: originX + x * scaleFactor,
+                sy: originY - y * scaleFactor // invert y so up is up (attractor y positive goes up)
+            };
+        }
+
+        function resetSim() {
+            trailCtx.clearRect(0, 0, width, height);
+            initParticles(1);
+        }
+
+        function initParticles(count) {
+            particles = [];
+            for (let i = 0; i < count; i++) {
+                const hue = Math.random() * 360;
+                // Start near origin with small random offset
+                const x = (Math.random() - 0.5) * 0.01;
+                const y = (Math.random() - 0.5) * 0.01;
+                const z = (Math.random() - 0.5) * 0.01;
+                const screen = worldToScreen(x, y);
+                particles.push({
+                    x, y, z,
+                    hue,
+                    lastSx: screen.sx,
+                    lastSy: screen.sy
+                });
+            }
+        }
+
+        function addParticle(x, y) {
+            // Convert screen to world coordinates (approx)
+            const wx = (x - originX) / scaleFactor;
+            const wy = -(y - originY) / scaleFactor; // invert
+            const hue = Math.random() * 360;
+            const screen = worldToScreen(wx, wy);
+            particles.push({
+                x: wx, y: wy, z: (Math.random() - 0.5) * 0.01,
+                hue,
+                lastSx: screen.sx,
+                lastSy: screen.sy
+            });
+            updateParticleCountDisplay();
+        }
+
+        function updateParticles(dt) {
+            const derivFunc = attractorDefs[currentType].deriv;
+            for (let p of particles) {
+                // Save last screen pos
+                const lastScreen = worldToScreen(p.x, p.y);
+                p.lastSx = lastScreen.sx;
+                p.lastSy = lastScreen.sy;
+
+                // Compute derivative
+                const d = derivFunc(p.x, p.y, p.z, params);
+                const step = dt * simSpeed;
+                p.x += d.dx * step;
+                p.y += d.dy * step;
+                p.z += d.dz * step;
+
+                // Check for explosion
+                if (isNaN(p.x) || isNaN(p.y) || isNaN(p.z) ||
+                    Math.abs(p.x) > 1e6 || Math.abs(p.y) > 1e6 || Math.abs(p.z) > 1e6) {
+                    // Reset this particle near origin
+                    p.x = (Math.random() - 0.5) * 0.01;
+                    p.y = (Math.random() - 0.5) * 0.01;
+                    p.z = (Math.random() - 0.5) * 0.01;
+                    const screen = worldToScreen(p.x, p.y);
+                    p.lastSx = screen.sx;
+                    p.lastSy = screen.sy;
+                }
+            }
+        }
+
+        function drawParticles() {
+            const globalCycle = hueCycle;
+            for (let p of particles) {
+                const screen = worldToScreen(p.x, p.y);
+                const sx = screen.sx;
+                const sy = screen.sy;
+
+                // Skip if same as last (unlikely)
+                if (sx === p.lastSx && sy === p.lastSy) continue;
+
+                // Draw segment from last to current
+                trailCtx.beginPath();
+                trailCtx.moveTo(p.lastSx, p.lastSy);
+                trailCtx.lineTo(sx, sy);
+                const hue = (p.hue + globalCycle) % 360;
+                trailCtx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+                trailCtx.lineWidth = trailWidth;
+                trailCtx.lineCap = 'round';
+                trailCtx.shadowBlur = 8;
+                trailCtx.shadowColor = `hsl(${hue}, 100%, 60%)`;
+                trailCtx.stroke();
+                trailCtx.shadowBlur = 0;
+
+                // Update last screen pos
+                p.lastSx = sx;
+                p.lastSy = sy;
+            }
+        }
+
+        function animate(timestamp) {
+            const delta = timestamp - lastTime || 16;
+            lastTime = timestamp;
+
+            frameCount++;
+            if (timestamp - lastFpsTime >= 1000) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                lastFpsTime = timestamp;
+            }
+
+            if (running) {
+                // Integration step: dt in simulation time
+                const dt = 0.01; // base time step
+                // Perform multiple substeps for speed? We'll use simSpeed multiplier.
+                updateParticles(dt);
+                drawParticles();
+
+                hueCycle = (hueCycle + colorSpeed * delta * 0.01) % 360;
+
+                // Render: clear main, draw trails, draw particles as glowing dots
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(trailCanvas, 0, 0);
+
+                // Draw current particle positions as bright dots
+                for (let p of particles) {
+                    const screen = worldToScreen(p.x, p.y);
+                    ctx.beginPath();
+                    ctx.arc(screen.sx, screen.sy, 3, 0, Math.PI*2);
+                    ctx.fillStyle = `hsl(${(p.hue+hueCycle)%360}, 100%, 70%)`;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+
+                updateParticleCountDisplay();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function updateParticleCountDisplay() {
+            document.getElementById('particleNum').textContent = particles.length;
+        }
+
+        // UI management
+        function updateDisplays() {
+            document.getElementById('simSpeedVal').textContent = simSpeedSlider.value;
+            document.getElementById('colorSpeedVal').textContent = colorSpeedSlider.value;
+            document.getElementById('widthVal').textContent = widthSlider.value;
+        }
+
+        function updateParamSliders() {
+            const def = attractorDefs[currentType];
+            // Set slider min/max/value from current params array
+            p1Slider.min = def.ranges[0][0];
+            p1Slider.max = def.ranges[0][1];
+            p1Slider.step = (def.ranges[0][1] - def.ranges[0][0]) > 20 ? 0.1 : 0.01;
+            p1Slider.value = params[0];
+            p1Label.textContent = def.paramNames[0];
+
+            p2Slider.min = def.ranges[1][0];
+            p2Slider.max = def.ranges[1][1];
+            p2Slider.step = (def.ranges[1][1] - def.ranges[1][0]) > 20 ? 0.1 : 0.01;
+            p2Slider.value = params[1];
+            p2Label.textContent = def.paramNames[1];
+
+            p3Slider.min = def.ranges[2][0];
+            p3Slider.max = def.ranges[2][1];
+            p3Slider.step = (def.ranges[2][1] - def.ranges[2][0]) > 20 ? 0.1 : 0.01;
+            p3Slider.value = params[2];
+            p3Label.textContent = def.paramNames[2];
+        }
+
+        typeSelect.addEventListener('change', () => {
+            currentType = typeSelect.value;
+            // Reset params to defaults for this type
+            params = attractorDefs[currentType].defaults.slice();
+            updateParamSliders();
+        });
+
+        const paramSliders = [p1Slider, p2Slider, p3Slider];
+        paramSliders.forEach((slider, idx) => {
+            slider.addEventListener('input', () => {
+                params[idx] = parseFloat(slider.value);
+            });
+        });
+
+        simSpeedSlider.addEventListener('input', () => {
+            simSpeed = parseFloat(simSpeedSlider.value);
+            updateDisplays();
+        });
+
+        colorSpeedSlider.addEventListener('input', () => {
+            colorSpeed = parseFloat(colorSpeedSlider.value);
+            updateDisplays();
+        });
+
+        widthSlider.addEventListener('input', () => {
+            trailWidth = parseInt(widthSlider.value);
+            updateDisplays();
+        });
+
+        pauseBtn.addEventListener('click', () => {
+            running = !running;
+            pauseBtn.textContent = running ? "Pause" : "Resume";
+            if (running) animate(0);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            resetSim();
+        });
+
+        randomBtn.addEventListener('click', () => {
+            // Pick random type
+            const types = Object.keys(attractorDefs);
+            const newType = types[Math.floor(Math.random() * types.length)];
+            currentType = newType;
+            typeSelect.value = newType;
+            // Random params within ranges
+            const def = attractorDefs[newType];
+            params = def.ranges.map(([min, max]) => min + Math.random() * (max - min));
+            // Update sliders to new params
+            updateParamSliders();
+            // Reset
+            resetSim();
+        });
+
+        canvas.addEventListener('click', (e) => {
+            addParticle(e.clientX, e.clientY);
+        });
+
+        // Initialize
+        updateParamSliders();
+        updateDisplays();
+        animate(0);
+    </script>
+</body>
+</html>
